@@ -55,7 +55,8 @@
         },
         "strings": {
             "patterns": [
-                { "name": "string.quoted.double.divine", "begin": "\"", "end": "\"", "patterns": [{ "name": "constant.character.escape.divine", "match": "\\\\." }] }
+                { "name": "string.quoted.double.divine", "begin": "\"", "end": "\"", "patterns": [{ "name": "constant.character.escape.divine", "match": "\\\\." }] },
+                { "name": "string.quoted.single.divine", "begin": "'", "end": "'", "patterns": [{ "name": "constant.character.escape.divine", "match": "\\\\." }] }
             ]
         }
     }
