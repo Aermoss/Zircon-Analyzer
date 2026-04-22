@@ -3,7 +3,7 @@
     "displayName": "Divine",
     "description": "Language support for Divine.",
     "publisher": "Aermoss",
-    "version": "0.0.4",
+    "version": "0.0.6",
     "engines": {
         "vscode": "^1.103.0"
     },
