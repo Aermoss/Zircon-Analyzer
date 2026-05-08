@@ -8,11 +8,14 @@ function activate(context) {
         args: [path.join(__dirname, "server.py")]
     };
 
+    const outputChannel = vscode.window.createOutputChannel("Zircon Analyzer");
+
     const clientOptions = {
-        documentSelector: [{ scheme: "file", language: "zircon" }]
+        documentSelector: [{ scheme: "file", language: "zircon" }],
+        outputChannel: outputChannel
     };
 
-    const client = new LanguageClient("zircon", "Zircon", serverOptions, clientOptions);
+    const client = new LanguageClient("zircon-analyzer", "Zircon Analyzer", serverOptions, clientOptions);
     context.subscriptions.push(client.start());
 }
 

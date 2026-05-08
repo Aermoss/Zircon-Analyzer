@@ -1,6 +1,6 @@
 import subprocess, re, os, threading, string, pygls.server, lsprotocol
 
-server = pygls.server.LanguageServer("zircon", "0.0.3")
+server = pygls.server.LanguageServer("zircon-analyzer", "0.0.3")
 
 HOVER_MAP = {
     "i8": "8-bit signed integer",
@@ -79,7 +79,7 @@ def get_diagnostics(ls: pygls.server.LanguageServer, uri: str) -> None:
 
         file, row, col, severity_str, message = match.groups()
 
-        if os.path.abspath(file).lower() != os.path.abspath(doc.path).lower():
+        if os.path.abspath(file).lower() != os.path.abspath(path).lower():
             continue
 
         line_no = int(row) - 1
@@ -105,7 +105,7 @@ def get_diagnostics(ls: pygls.server.LanguageServer, uri: str) -> None:
                 ),
                 message = message.strip(),
                 severity = lsprotocol.types.DiagnosticSeverity.Error if severity_str == "Error" else lsprotocol.types.DiagnosticSeverity.Warning,
-                source = "divinec"
+                source = os.path.split(COMPILER_PATH)[1]
             )
         )
 
