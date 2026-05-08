@@ -1,9 +1,9 @@
 {
-    "name": "divine",
-    "displayName": "Divine",
-    "description": "Language support for Divine.",
-    "publisher": "Aermoss",
-    "version": "0.0.7",
+    "name": "zircon-analyzer",
+    "displayName": "Zircon Analyzer",
+    "description": "Zircon language support for Visual Studio Code.",
+    "publisher": "zircon",
+    "version": "0.0.8",
     "engines": {
         "vscode": "^1.103.0"
     },
@@ -12,7 +12,7 @@
     ],
     "repository": {
         "type": "git",
-        "url": "https://github.com/Aermoss/Divine-Extension"
+        "url": "https://github.com/Aermoss/Zircon-Analyzer"
     },
     "dependencies": {
         "vscode-languageclient": "^8.0.0"
@@ -20,17 +20,17 @@
     "contributes": {
         "languages": [
             {
-                "id": "divine",
-                "aliases": ["Divine"],
-                "extensions": [".div"],
+                "id": "zircon",
+                "aliases": ["Zircon"],
+                "extensions": [".zir"],
                 "configuration": "./language-configuration.json"
             }
         ],
         "grammars": [
             {
-                "language": "divine",
-                "scopeName": "source.divine",
-                "path": "./syntaxes/divine.tmLanguage.json"
+                "language": "zircon",
+                "scopeName": "source.zircon",
+                "path": "./syntaxes/zircon.tmLanguage.json"
             }
         ]
     },

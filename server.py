@@ -1,6 +1,6 @@
 import subprocess, re, os, threading, string, pygls.server, lsprotocol
 
-server = pygls.server.LanguageServer("divine", "0.0.2")
+server = pygls.server.LanguageServer("zircon", "0.0.3")
 
 HOVER_MAP = {
     "i8": "8-bit signed integer",
@@ -115,10 +115,7 @@ def get_diagnostics(ls: pygls.server.LanguageServer, uri: str) -> None:
 def on_initialize(ls: pygls.server.LanguageServer, params: lsprotocol.types.InitializeParams):
     global COMPILER_PATH, INCLUDE_PATH
 
-    COMPILER_PATH = os.path.join(ls.workspace.root_path, "divinec2.exe")
-
-    if not os.path.exists(COMPILER_PATH):
-        COMPILER_PATH = os.path.join(ls.workspace.root_path, "divinec.exe")
+    COMPILER_PATH = os.path.join(ls.workspace.root_path, "zirconc.exe")
 
     if not os.path.exists(COMPILER_PATH):
         COMPILER_PATH = None
