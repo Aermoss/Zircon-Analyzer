@@ -79,7 +79,7 @@ def get_diagnostics(ls: pygls.server.LanguageServer, uri: str) -> None:
 
         file, row, col, severity_str, message = match.groups()
 
-        if os.path.abspath(file).lower() != os.path.abspath(path).lower():
+        if os.path.abspath(file).lower() != os.path.abspath(doc.path).lower():
             continue
 
         line_no = int(row) - 1
