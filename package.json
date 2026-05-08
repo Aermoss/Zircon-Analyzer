@@ -2,7 +2,7 @@
     "name": "zircon-analyzer",
     "displayName": "Zircon Analyzer",
     "description": "Zircon language support for Visual Studio Code.",
-    "publisher": "zircon",
+    "publisher": "zircon-lang",
     "version": "0.0.8",
     "engines": {
         "vscode": "^1.103.0"
