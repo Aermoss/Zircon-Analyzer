@@ -74,6 +74,7 @@
                         "0": { "name": "punctuation.definition.preprocessor.end.zircon" }
                     },
                     "patterns": [
+                        { "include": "#operators" },
                         { "name": "keyword.control.directive.zircon", "match": "\\b(if|elif|else|endif|error|warning)\\b" },
                         { "include": "#constants" },
                         { "include": "#strings" }
