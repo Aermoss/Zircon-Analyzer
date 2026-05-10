@@ -5,14 +5,14 @@
     "patterns": [
         { "include": "#comments" },
         { "include": "#preprocessor" },
+        { "include": "#attributes" },
         { "include": "#constants" },
         { "include": "#types" },
         { "include": "#keywords" },
         { "include": "#operators" },
         { "include": "#entities" },
         { "include": "#numbers" },
-        { "include": "#strings" },
-        { "include": "#punctuation" }
+        { "include": "#strings" }
     ],
     "repository": {
         "comments": {
@@ -21,12 +21,81 @@
                 { "name": "comment.block.zircon", "begin": "/\\*", "end": "\\*/" }
             ]
         },
+        "preprocessor": {
+            "patterns": [
+                {
+                    "name": "meta.preprocessor.zircon",
+                    "begin": "#\\[",
+                    "end": "\\]",
+                    "beginCaptures": {
+                        "0": { "name": "punctuation.definition.preprocessor.begin.zircon" }
+                    },
+                    "endCaptures": {
+                        "0": { "name": "punctuation.definition.preprocessor.end.zircon" }
+                    },
+                    "patterns": [
+                        { "include": "#comments" },
+                        { "name": "keyword.control.directive.zircon", "match": "\\b(if|elif|else|endif|include|error|warning)\\b" },
+                        { "include": "#constants" },
+                        { "include": "#operators" },
+                        { "include": "#numbers" },
+                        { "include": "#strings" }
+                    ]
+                }
+            ]
+        },
+        "attributes": {
+            "patterns": [
+                {
+                    "name": "meta.decorator.zircon",
+                    "begin": "@",
+                    "beginCaptures": {
+                        "0": { "name": "support.name.decorator.zircon" }
+                    },
+                    "end": "(?=\\s|$)",
+                    "patterns": [
+                        {
+                            "name": "support.name.decorator.zircon",
+                            "match": "[A-Za-z_][A-Za-z0-9_]*"
+                        },
+                        {
+                            "begin": "\\(",
+                            "beginCaptures": {
+                                "0": { "name": "punctuation.bracket.round.decorator.zircon" }
+                            },
+                            "end": "\\)",
+                            "endCaptures": {
+                                "0": { "name": "punctuation.bracket.round.decorator.zircon" }
+                            },
+                            "patterns": [
+                                { "include": "#comments" },
+                                { "include": "#preprocessor" },
+                                { "include": "#constants" },
+                                { "include": "#operators" },
+                                { "include": "#numbers" },
+                                { "include": "#strings" }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        },
+        "constants": {
+            "patterns": [
+                { "name": "constant.language.zircon", "match": "\\b(true|false|null)\\b" },
+                { "name": "support.constant.zircon", "match": "\\bzero\\b" }
+            ]
+        },
+        "types": {
+            "patterns": [
+                { "name": "storage.type.zircon", "match": "\\b(void|bool|i8|i16|i32|i64|i128|u8|u16|u32|u64|u128|f32|f64)\\b" }
+            ]
+        },
         "keywords": {
             "patterns": [
                 { "name": "keyword.control.flow.zircon", "match": "\\b(if|else|for|while|loop|match|ret|break|continue)\\b" },
-                { "name": "keyword.declaration.zircon", "match": "\\b(let|mut|const|volatile|func|class|type|enum|impl|pub|priv|extern|use|asm|namespace|async|await|static)\\b" },
-                { "name": "keyword.operator.word.zircon", "match": "\\b(as|op|new|del|in)\\b" },
-                { "name": "keyword.import.zircon", "match": "\\b(include)\\b" }
+                { "name": "keyword.declaration.zircon", "match": "\\b(let|mut|const|volatile|func|class|type|enum|impl|pub|priv|extern|asm|async|await|static)\\b" },
+                { "name": "keyword.operator.word.zircon", "match": "\\b(as|op|new|del|in)\\b" }
             ]
         },
         "operators": {
@@ -59,37 +128,6 @@
                     "name": "keyword.operator.ternary.zircon",
                     "match": "(\\?|:)"
                 }
-            ]
-        },
-        "preprocessor": {
-            "patterns": [
-                {
-                    "name": "meta.preprocessor.zircon",
-                    "begin": "#\\[",
-                    "end": "\\]",
-                    "beginCaptures": {
-                        "0": { "name": "punctuation.definition.preprocessor.begin.zircon" }
-                    },
-                    "endCaptures": {
-                        "0": { "name": "punctuation.definition.preprocessor.end.zircon" }
-                    },
-                    "patterns": [
-                        { "include": "#operators" },
-                        { "name": "keyword.control.directive.zircon", "match": "\\b(if|elif|else|endif|error|warning)\\b" },
-                        { "include": "#constants" },
-                        { "include": "#strings" }
-                    ]
-                }
-            ]
-        },
-        "types": {
-            "patterns": [
-                { "name": "storage.type.zircon", "match": "\\b(void|bool|char|i8|i16|i32|i64|i128|u8|u16|u32|u64|u128|f32|f64)\\b" }
-            ]
-        },
-        "constants": {
-            "patterns": [
-                { "name": "constant.language.zircon", "match": "\\b(true|false|null)\\b" }
             ]
         },
         "entities": {
