@@ -115,7 +115,7 @@ def get_diagnostics(ls: pygls.server.LanguageServer, uri: str) -> None:
 def on_initialize(ls: pygls.server.LanguageServer, params: lsprotocol.types.InitializeParams):
     global COMPILER_PATH, INCLUDE_PATH
 
-    COMPILER_PATH = os.path.join(ls.workspace.root_path, "zirconc.exe")
+    COMPILER_PATH = os.path.join(ls.workspace.root_path, "bin", "zirconc.exe")
 
     if not os.path.exists(COMPILER_PATH):
         COMPILER_PATH = None
