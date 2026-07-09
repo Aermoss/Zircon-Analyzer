@@ -88,7 +88,7 @@
         },
         "types": {
             "patterns": [
-                { "name": "storage.type.zircon", "match": "\\b(void|bool|i8|i16|i32|i64|i128|u8|u16|u32|u64|u128|f32|f64)\\b" }
+                { "name": "storage.type.zircon", "match": "\\b(void|bool|char|i8|i16|i32|i64|i128|isize|u8|u16|u32|u64|u128|usize|f32|f64)\\b" }
             ]
         },
         "keywords": {
@@ -138,10 +138,10 @@
         },
         "numbers": {
             "patterns": [
-                { "name": "constant.numeric.hex.zircon", "match": "\\b0[xX][0-9a-fA-F]+(i(8|16|32|64|128)|u(8|16|32|64|128))?\\b" },
-                { "name": "constant.numeric.binary.zircon", "match": "\\b0[bB][01]+(i(8|16|32|64|128)|u(8|16|32|64|128))?\\b" },
-                { "name": "constant.numeric.octal.zircon", "match": "\\b0[oO][0-7]+(i(8|16|32|64|128)|u(8|16|32|64|128))?\\b" },
-                { "name": "constant.numeric.decimal.zircon", "match": "\\b[0-9]+(i(8|16|32|64|128)|u(8|16|32|64|128))?\\b" },
+                { "name": "constant.numeric.hex.zircon", "match": "\\b0[xX][0-9a-fA-F]+(i(8|16|32|64|128|size)|u(8|16|32|64|128|size))?\\b" },
+                { "name": "constant.numeric.binary.zircon", "match": "\\b0[bB][01]+(i(8|16|32|64|128|size)|u(8|16|32|64|128|size))?\\b" },
+                { "name": "constant.numeric.octal.zircon", "match": "\\b0[oO][0-7]+(i(8|16|32|64|128|size)|u(8|16|32|64|128|size))?\\b" },
+                { "name": "constant.numeric.decimal.zircon", "match": "\\b[0-9]+(i(8|16|32|64|128|size)|u(8|16|32|64|128|size))?\\b" },
                 { "name": "constant.numeric.float.zircon", "match": "\\b([0-9]+\\.[0-9]*|[0-9]*\\.[0-9]+)([eE][-+]?[0-9]*)?(f32|f64)?\\b" },
                 { "name": "constant.numeric.float.exp.zircon", "match": "\\b[0-9]+[eE][-+]?[0-9]*(f32|f64)?\\b" }
             ]

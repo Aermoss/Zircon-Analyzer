@@ -3,7 +3,7 @@
     "displayName": "Zircon Analyzer",
     "description": "Zircon language support for Visual Studio Code.",
     "publisher": "zircon-lang",
-    "version": "0.1.4",
+    "version": "0.1.5",
     "engines": {
         "vscode": "^1.103.0"
     },
@@ -15,14 +15,18 @@
         "url": "https://github.com/Aermoss/Zircon-Analyzer"
     },
     "dependencies": {
-        "vscode-languageclient": "^8.0.0"
+        "vscode-languageclient": "^8.1.0"
     },
     "contributes": {
         "languages": [
             {
                 "id": "zircon",
-                "aliases": ["Zircon"],
-                "extensions": [".zir"],
+                "aliases": [
+                    "Zircon"
+                ],
+                "extensions": [
+                    ".zir"
+                ],
                 "configuration": "./language-configuration.json"
             }
         ],

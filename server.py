@@ -3,16 +3,23 @@ import subprocess, re, os, threading, string, pygls.server, lsprotocol
 server = pygls.server.LanguageServer("zircon-analyzer", "0.0.3")
 
 HOVER_MAP = {
+    "bool": "Boolean value",
+    "char": "32-bit Unicode scalar value",
+
     "i8": "8-bit signed integer",
     "i16": "16-bit signed integer",
     "i32": "32-bit signed integer",
     "i64": "64-bit signed integer",
     "i128": "128-bit signed integer",
+    "isize": "Pointer-sized signed integer",
+
     "u8": "8-bit unsigned integer",
     "u16": "16-bit unsigned integer",
     "u32": "32-bit unsigned integer",
     "u64": "64-bit unsigned integer",
     "u128": "128-bit unsigned integer",
+    "usize": "Pointer-sized unsigned integer",
+
     "f32": "32-bit floating-point number",
     "f64": "64-bit floating-point number"
 }
@@ -25,12 +32,9 @@ KEYWORDS = [
 ]
 
 TYPES = [
-    "void", "bool",
-    "i8", "u8",
-    "i16", "u16",
-    "i32", "u32",
-    "i64", "u64",
-    "i128", "u128",
+    "void", "bool", "char",
+    "i8", "i16", "i32", "i64", "i128", "isize",
+    "u8", "u16", "u32", "u64", "u128", "usize",
     "f32", "f64"
 ]
 
