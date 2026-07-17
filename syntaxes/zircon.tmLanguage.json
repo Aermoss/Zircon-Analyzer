@@ -93,9 +93,26 @@
         },
         "keywords": {
             "patterns": [
-                { "name": "keyword.control.flow.zircon", "match": "\\b(if|else|for|while|loop|match|ret|break|continue)\\b" },
-                { "name": "keyword.declaration.zircon", "match": "\\b(let|mut|const|volatile|func|class|type|enum|impl|pub|priv|extern|asm|async|await|static)\\b" },
-                { "name": "keyword.operator.word.zircon", "match": "\\b(as|op|new|del|in)\\b" }
+                { 
+                    "name": "keyword.control.flow.zircon", 
+                    "match": "\\b(if|else|for|while|loop|match|return|break|continue|async|await)\\b" 
+                },
+                { 
+                    "name": "keyword.declaration.zircon", 
+                    "match": "\\b(let|mut|static|const|extern|pub|fn|class|struct|enum|type)\\b" 
+                },
+                { 
+                    "name": "keyword.operator.word.zircon", 
+                    "match": "\\b(as|in|operator)\\b" 
+                },
+                { 
+                    "name": "keyword.other.zircon", 
+                    "match": "\\b(volatile|unsafe|asm)\\b" 
+                },
+                { 
+                    "name": "keyword.control.memory.zircon", 
+                    "match": "\\b(new|delete)\\b" 
+                }
             ]
         },
         "operators": {
