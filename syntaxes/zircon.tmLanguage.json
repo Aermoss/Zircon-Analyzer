@@ -149,7 +149,7 @@
         },
         "entities": {
             "patterns": [
-                { "name": "entity.name.type.zircon", "match": "(?<=\\b(class|enum)\\s+)[A-Za-z_][A-Za-z0-9_]*" },
+                { "name": "entity.name.type.zircon", "match": "(?<=\\b(class|struct|enum)\\s+)[A-Za-z_][A-Za-z0-9_]*" },
                 { "name": "entity.name.function.zircon", "match": "[A-Za-z_][A-Za-z0-9_]*(?=\\s*\\()" }
             ]
         },
