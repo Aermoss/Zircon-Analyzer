@@ -1,6 +1,6 @@
 import subprocess, re, os, threading, string, pygls.server, lsprotocol
 
-server = pygls.server.LanguageServer("zircon-analyzer", "0.0.3")
+server = pygls.server.LanguageServer("zircon-analyzer", "0.0.4")
 
 HOVER_MAP = {
     "bool": "Boolean value",
@@ -25,10 +25,10 @@ HOVER_MAP = {
 }
 
 KEYWORDS = [
-    "if", "else", "for", "while", "loop", "match", "ret", "break", "continue",
-    "let", "mut", "const", "volatile", "func", "class", "type", "enum", "impl",
-    "extern", "use", "asm", "namespace", "async", "await", "static",
-    "pub", "priv", "as", "op", "new", "del", "in", "include", "this"
+    "if", "else", "for", "while", "loop", "match", "return", "break", "continue",
+    "let", "mut", "const", "volatile", "fn", "class", "struct", "enum", "extend", "type",
+    "extern", "asm", "async", "await", "static",
+    "pub", "as", "operator", "new", "delete", "in", "include", "this"
 ]
 
 TYPES = [
