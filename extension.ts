@@ -67,6 +67,94 @@ function positionAt(source: string, offset: number): vscode.Position {
 
 type DeclarationKind = "fn" | "class" | "struct" | "enum" | "extend" | "type" | "const" | "static";
 
+interface FunctionInfo {
+    name: string;
+    label: string;
+    parameters: string[];
+    documentation?: string;
+}
+
+function splitTopLevel(value: string): string[] {
+    const parts: string[] = [];
+    let start = 0;
+    let round = 0;
+    let square = 0;
+    let angle = 0;
+    for (let i = 0; i < value.length; i++) {
+        switch (value[i]) {
+            case "(": round++; break;
+            case ")": round--; break;
+            case "[": square++; break;
+            case "]": square--; break;
+            case "<": angle++; break;
+            case ">": angle = Math.max(0, angle - 1); break;
+            case ",":
+                if (round === 0 && square === 0 && angle === 0) {
+                    parts.push(value.slice(start, i).trim());
+                    start = i + 1;
+                }
+                break;
+        }
+    }
+    const tail = value.slice(start).trim();
+    if (tail) parts.push(tail);
+    return parts;
+}
+
+function indexFunctionInfo(source: string): FunctionInfo[] {
+    const code = maskNonCode(source);
+    const sourceLines = source.split(/\r\n|\r|\n/);
+    const pattern = /\bfn\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:<[^>\r\n]*>\s*)?\(/g;
+    const functions: FunctionInfo[] = [];
+    let match: RegExpExecArray | null;
+
+    while ((match = pattern.exec(code)) !== null) {
+        const open = pattern.lastIndex - 1;
+        let depth = 1;
+        let close = open + 1;
+        while (close < code.length && depth > 0) {
+            if (code[close] === "(") depth++;
+            else if (code[close] === ")") depth--;
+            close++;
+        }
+        if (depth !== 0) continue;
+
+        const parameters = splitTopLevel(source.slice(open + 1, close - 1))
+            .filter(parameter => parameter && !/^(?:&\s*(?:mut\s+)?|mut\s+)?this$/.test(parameter));
+        let suffixEnd = close;
+        let suffix = code.slice(close).match(/^\s*(?:async\s*)?(?:->\s*([^;{\r\n]+))?/);
+        if (suffix) suffixEnd = close + suffix[0].length;
+        const returnType = suffix?.[1]?.trim();
+        const label = `fn ${match[1]}(${parameters.join(", ")})${returnType ? ` -> ${returnType}` : ""}`;
+
+        const declarationLine = positionAt(source, match.index).line;
+        const docLines: string[] = [];
+        for (let line = declarationLine - 1; line >= 0; line--) {
+            const text = sourceLines[line].trim();
+            if (!text.startsWith("///")) break;
+            docLines.unshift(text.replace(/^\/\/\/\s?/, ""));
+        }
+        functions.push({ name: match[1], label, parameters, documentation: docLines.length ? docLines.join("\n") : undefined });
+        pattern.lastIndex = Math.max(pattern.lastIndex, suffixEnd);
+    }
+    return functions;
+}
+
+function findActiveCall(source: string, offset: number): { name: string; activeParameter: number } | undefined {
+    const code = maskNonCode(source);
+    const stack: Array<{ open: number; commas: number }> = [];
+    for (let i = 0; i < Math.min(offset, code.length); i++) {
+        if (code[i] === "(") stack.push({ open: i, commas: 0 });
+        else if (code[i] === ")") stack.pop();
+        else if (code[i] === "," && stack.length) stack[stack.length - 1].commas++;
+    }
+    const active = stack[stack.length - 1];
+    if (!active) return undefined;
+    const callee = code.slice(0, active.open).trimEnd();
+    const name = /([A-Za-z_][A-Za-z0-9_]*)$/.exec(callee)?.[1];
+    return name ? { name, activeParameter: active.commas } : undefined;
+}
+
 function indexDefinitions(uri: vscode.Uri, source: string): Map<string, vscode.Location[]> {
     const code = maskNonCode(source);
     const declarationPattern = /\b(?:fn|class|struct|enum|type)\s+([A-Za-z_][A-Za-z0-9_]*)/g;
@@ -134,6 +222,9 @@ export function activate(context: vscode.ExtensionContext): void {
     const timers = new Map<string, ReturnType<typeof setTimeout>>();
     const generations = new Map<string, number>();
     let definitionIndex: Map<string, vscode.Location[]> | undefined;
+    let functionIndex: Map<string, FunctionInfo[]> | undefined;
+    let hoverIndex: Map<string, string[]> | undefined;
+    let symbolKindIndex: Map<string, vscode.CompletionItemKind> | undefined;
     let definitionIndexRevision = 0;
     let definitionIndexBuild: Promise<Map<string, vscode.Location[]>> | undefined;
     let lastReportedCompilerIssue: string | undefined;
@@ -155,6 +246,9 @@ export function activate(context: vscode.ExtensionContext): void {
     function invalidateDefinitionIndex(): void {
         definitionIndexRevision++;
         definitionIndex = undefined;
+        functionIndex = undefined;
+        hoverIndex = undefined;
+        symbolKindIndex = undefined;
     }
 
     async function getDefinitionIndex(): Promise<Map<string, vscode.Location[]>> {
@@ -165,6 +259,9 @@ export function activate(context: vscode.ExtensionContext): void {
         definitionIndexBuild = (async () => {
             const uris = new Map<string, vscode.Uri>();
             const excludedDirectories = "{**/.claude/**,**/.git/**,**/node_modules/**}";
+            for (const document of vscode.workspace.textDocuments) {
+                if (document.languageId === "zircon" && document.uri.scheme === "file") uris.set(document.uri.toString(), document.uri);
+            }
             for (const uri of await vscode.workspace.findFiles("**/*.zir", excludedDirectories)) uris.set(uri.toString(), uri);
 
             const compiler = findCompiler();
@@ -177,6 +274,9 @@ export function activate(context: vscode.ExtensionContext): void {
             }
 
             const index = new Map<string, vscode.Location[]>();
+            const functions = new Map<string, FunctionInfo[]>();
+            const hovers = new Map<string, string[]>();
+            const symbolKinds = new Map<string, vscode.CompletionItemKind>();
             const openDocuments = new Map(vscode.workspace.textDocuments.map(document => [document.uri.toString(), document]));
             for (const uri of uris.values()) {
                 const openDocument = openDocuments.get(uri.toString());
@@ -193,9 +293,44 @@ export function activate(context: vscode.ExtensionContext): void {
                     existing.push(...locations);
                     index.set(name, existing);
                 }
+                for (const info of indexFunctionInfo(source)) {
+                    const overloads = functions.get(info.name) || [];
+                    overloads.push(info);
+                    functions.set(info.name, overloads);
+                    const descriptions = hovers.get(info.name) || [];
+                    descriptions.push(info.label);
+                    hovers.set(info.name, descriptions);
+                }
+                const code = maskNonCode(source);
+                const sourceLines = source.split(/\r\n|\r|\n/);
+                const symbolPattern = /\b(fn|class|struct|enum|type)\s+([A-Za-z_][A-Za-z0-9_]*)/g;
+                let symbol: RegExpExecArray | null;
+                while ((symbol = symbolPattern.exec(code)) !== null) {
+                    const kind = symbol[1] === "fn" ? vscode.CompletionItemKind.Function
+                        : symbol[1] === "class" ? vscode.CompletionItemKind.Class
+                            : symbol[1] === "struct" ? vscode.CompletionItemKind.Struct
+                                : symbol[1] === "enum" ? vscode.CompletionItemKind.Enum
+                                    : vscode.CompletionItemKind.TypeParameter;
+                    symbolKinds.set(symbol[2], kind);
+                }
+                const declarationPattern = /\b(class|struct|enum|type|const|static)\s+(?:mut\s+)?([A-Za-z_][A-Za-z0-9_]*)/g;
+                let declaration: RegExpExecArray | null;
+                while ((declaration = declarationPattern.exec(code)) !== null) {
+                    const line = sourceLines[positionAt(source, declaration.index).line]?.trim();
+                    if (!line) continue;
+                    const descriptions = hovers.get(declaration[2]) || [];
+                    const declarationText = line.replace(/\s*\{\s*$/, "");
+                    descriptions.push(declarationText.length > 240 ? `${declarationText.slice(0, 237)}...` : declarationText);
+                    hovers.set(declaration[2], descriptions);
+                }
             }
 
-            if (definitionIndexRevision === buildRevision) definitionIndex = index;
+            if (definitionIndexRevision === buildRevision) {
+                definitionIndex = index;
+                functionIndex = functions;
+                hoverIndex = hovers;
+                symbolKindIndex = symbolKinds;
+            }
             return index;
         })().finally(() => {
             definitionIndexBuild = undefined;
@@ -205,12 +340,54 @@ export function activate(context: vscode.ExtensionContext): void {
     }
 
     context.subscriptions.push(vscode.languages.registerHoverProvider(selector, {
-        provideHover(document, position) {
-            const word = document.getText(document.getWordRangeAtPosition(position));
+        async provideHover(document, position) {
+            const range = document.getWordRangeAtPosition(position);
+            if (!range) return undefined;
+            const word = document.getText(range);
             const description = HOVER_MAP[word];
-            return description ? new vscode.Hover(new vscode.MarkdownString(description)) : undefined;
+            if (description) return new vscode.Hover(new vscode.MarkdownString(description), range);
+
+            await getDefinitionIndex();
+            const localFunctions = indexFunctionInfo(document.getText()).filter(info => info.name === word);
+            const functions = localFunctions.length ? localFunctions : (functionIndex?.get(word) || []);
+            if (functions.length) {
+                const markdown = new vscode.MarkdownString();
+                functions.forEach((info, index) => {
+                    if (index) markdown.appendMarkdown("\n\n---\n\n");
+                    markdown.appendCodeblock(info.label, "zircon");
+                    if (info.documentation) markdown.appendMarkdown(`\n${info.documentation}`);
+                });
+                return new vscode.Hover(markdown, range);
+            }
+
+            const declarations = [...new Set(hoverIndex?.get(word) || [])];
+            if (!declarations.length) return undefined;
+            const markdown = new vscode.MarkdownString();
+            for (const declaration of declarations) markdown.appendCodeblock(declaration, "zircon");
+            return new vscode.Hover(markdown, range);
         }
     }));
+
+    context.subscriptions.push(vscode.languages.registerSignatureHelpProvider(selector, {
+        async provideSignatureHelp(document, position) {
+            const call = findActiveCall(document.getText(), document.offsetAt(position));
+            if (!call) return undefined;
+            await getDefinitionIndex();
+            const localOverloads = indexFunctionInfo(document.getText()).filter(info => info.name === call.name);
+            const overloads = localOverloads.length ? localOverloads : functionIndex?.get(call.name);
+            if (!overloads?.length) return undefined;
+
+            const help = new vscode.SignatureHelp();
+            help.signatures = overloads.map(info => {
+                const signature = new vscode.SignatureInformation(info.label, info.documentation);
+                signature.parameters = info.parameters.map(parameter => new vscode.ParameterInformation(parameter));
+                return signature;
+            });
+            help.activeSignature = 0;
+            help.activeParameter = Math.min(call.activeParameter, Math.max(0, help.signatures[0].parameters.length - 1));
+            return help;
+        }
+    }, "(", ","));
 
     context.subscriptions.push(vscode.languages.registerDefinitionProvider(selector, {
         async provideDefinition(document, position) {
@@ -232,14 +409,46 @@ export function activate(context: vscode.ExtensionContext): void {
     }));
 
     context.subscriptions.push(vscode.languages.registerCompletionItemProvider(selector, {
-        provideCompletionItems() {
-            return [
+        async provideCompletionItems(document) {
+            const items = [
                 ...KEYWORDS.map(label => makeCompletion(label, vscode.CompletionItemKind.Keyword, "keyword")),
                 ...TYPES.map(label => makeCompletion(label, vscode.CompletionItemKind.Class, "built-in type")),
                 ...CONSTANTS.map(label => makeCompletion(label, vscode.CompletionItemKind.Constant, "constant"))
             ];
+            const definitions = await getDefinitionIndex();
+            const localDefinitions = indexDefinitions(document.uri, document.getText());
+            const localKinds = new Map<string, vscode.CompletionItemKind>();
+            const localSymbolPattern = /\b(fn|class|struct|enum|type)\s+([A-Za-z_][A-Za-z0-9_]*)/g;
+            const localCode = maskNonCode(document.getText());
+            let localSymbol: RegExpExecArray | null;
+            while ((localSymbol = localSymbolPattern.exec(localCode)) !== null) {
+                const kind = localSymbol[1] === "fn" ? vscode.CompletionItemKind.Function
+                    : localSymbol[1] === "class" ? vscode.CompletionItemKind.Class
+                        : localSymbol[1] === "struct" ? vscode.CompletionItemKind.Struct
+                            : localSymbol[1] === "enum" ? vscode.CompletionItemKind.Enum
+                                : vscode.CompletionItemKind.TypeParameter;
+                localKinds.set(localSymbol[2], kind);
+            }
+            const known = new Set(items.map(item => item.label.toString()));
+            const names = new Set([...definitions.keys(), ...localDefinitions.keys()]);
+            for (const name of names) {
+                if (known.has(name)) continue;
+                const item = makeCompletion(name, localKinds.get(name) || symbolKindIndex?.get(name) || vscode.CompletionItemKind.Variable, "workspace symbol");
+                const declarations = [...new Set(hoverIndex?.get(name) || [])];
+                const functions = functionIndex?.get(name) || [];
+                if (functions.length) {
+                    item.detail = functions[0].label;
+                    if (functions[0].documentation) item.documentation = new vscode.MarkdownString(functions[0].documentation);
+                } else if (declarations.length) {
+                    item.documentation = new vscode.MarkdownString(declarations.map(value => `\`${value}\``).join("\n\n"));
+                }
+                item.sortText = `1_${name}`;
+                items.push(item);
+                known.add(name);
+            }
+            return items;
         }
-    }, ".", ":"));
+    }, ".", ":", ..."abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_".split("")));
 
     context.subscriptions.push(vscode.languages.registerDocumentSymbolProvider(selector, {
         provideDocumentSymbols(document) {
@@ -313,9 +522,11 @@ export function activate(context: vscode.ExtensionContext): void {
 
     context.subscriptions.push(
         vscode.workspace.onDidOpenTextDocument(document => checkDocument(document)),
-        vscode.workspace.onDidSaveTextDocument(document => scheduleCheck(document, 0)),
-        vscode.workspace.onDidChangeTextDocument(event => {
+        vscode.workspace.onDidSaveTextDocument(document => {
             invalidateDefinitionIndex();
+            scheduleCheck(document, 0);
+        }),
+        vscode.workspace.onDidChangeTextDocument(event => {
             scheduleCheck(event.document);
         }),
         vscode.workspace.onDidCloseTextDocument(document => {
@@ -354,6 +565,7 @@ export function activate(context: vscode.ExtensionContext): void {
         );
     }
 
+    void getDefinitionIndex();
     for (const document of vscode.workspace.textDocuments) checkDocument(document);
 }
 
