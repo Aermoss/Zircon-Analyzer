@@ -3,7 +3,7 @@
     "displayName": "Zircon Analyzer",
     "description": "Zircon language support for Visual Studio Code.",
     "publisher": "zircon-lang",
-    "version": "0.1.9",
+    "version": "0.2.0",
     "engines": {
         "vscode": "^1.103.0"
     },
@@ -14,10 +14,27 @@
         "type": "git",
         "url": "https://github.com/Aermoss/Zircon-Analyzer"
     },
-    "dependencies": {
-        "vscode-languageclient": "^8.1.0"
+    "scripts": {
+        "compile": "tsc -p ./",
+        "watch": "tsc --watch -p ./",
+        "vscode:prepublish": "npm run compile"
     },
     "contributes": {
+        "configuration": {
+            "title": "Zircon",
+            "properties": {
+                "zircon.compilerPath": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Path to the zirconc compiler executable. If empty, zirconc is searched on the system PATH."
+                },
+                "zircon.includePath": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Optional Zircon include directory. Defaults to ../include relative to the compiler executable."
+                }
+            }
+        },
         "languages": [
             {
                 "id": "zircon",
@@ -38,5 +55,13 @@
             }
         ]
     },
-    "main": "./extension.js"
+    "main": "./out/extension.js",
+    "activationEvents": [
+        "onLanguage:zircon"
+    ],
+    "devDependencies": {
+        "@types/node": "^26.6.5",
+        "@types/vscode": "^1.103.0",
+        "typescript": "^7.0.2"
+    }
 }
