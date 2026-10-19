@@ -51,11 +51,58 @@ function includePath(compilerPath: string): string | undefined {
     return fs.existsSync(candidate) ? candidate : undefined;
 }
 
+function maskNonCode(source: string): string {
+    const mask = (value: string): string => value.replace(/[^\r\n]/g, " ");
+    return source
+        .replace(/"(?:\\.|[^"\\\r\n])*"|'(?:\\.|[^'\\\r\n])*'/g, mask)
+        .replace(/\/\*[\s\S]*?\*\//g, mask)
+        .replace(/\/\/[^\r\n]*/g, mask);
+}
+
+function positionAt(source: string, offset: number): vscode.Position {
+    const before = source.slice(0, offset);
+    const lines = before.split(/\r\n|\r|\n/);
+    return new vscode.Position(lines.length - 1, lines[lines.length - 1].length);
+}
+
+type DeclarationKind = "fn" | "class" | "struct" | "enum" | "extend" | "type" | "const" | "static";
+
+function indexDefinitions(uri: vscode.Uri, source: string): Map<string, vscode.Location[]> {
+    const code = maskNonCode(source);
+    const declarationPattern = /\b(?:fn|class|struct|enum|type)\s+([A-Za-z_][A-Za-z0-9_]*)/g;
+    const definitions = new Map<string, vscode.Location[]>();
+    let match: RegExpExecArray | null;
+
+    while ((match = declarationPattern.exec(code)) !== null) {
+        const nameOffset = match.index + match[0].lastIndexOf(match[1]);
+        const position = positionAt(source, nameOffset);
+        const range = new vscode.Range(position, position.translate(0, match[1].length));
+        const locations = definitions.get(match[1]) || [];
+        locations.push(new vscode.Location(uri, range));
+        definitions.set(match[1], locations);
+    }
+
+    return definitions;
+}
+
 function makeCompletion(label: string, kind: vscode.CompletionItemKind, detail: string): vscode.CompletionItem {
     const item = new vscode.CompletionItem(label, kind);
     item.detail = detail;
     item.documentation = new vscode.MarkdownString(HOVER_MAP[label] || label);
     return item;
+}
+
+function documentSymbolKind(kind: DeclarationKind): vscode.SymbolKind {
+    switch (kind) {
+        case "fn": return vscode.SymbolKind.Function;
+        case "class": return vscode.SymbolKind.Class;
+        case "struct": return vscode.SymbolKind.Struct;
+        case "enum": return vscode.SymbolKind.Enum;
+        case "extend": return vscode.SymbolKind.Interface;
+        case "const":
+        case "static": return vscode.SymbolKind.Constant;
+        case "type": return vscode.SymbolKind.TypeParameter;
+    }
 }
 
 function parseDiagnostics(output: string, document: vscode.TextDocument): vscode.Diagnostic[] {
@@ -86,6 +133,9 @@ export function activate(context: vscode.ExtensionContext): void {
     const diagnostics = vscode.languages.createDiagnosticCollection("zircon");
     const timers = new Map<string, ReturnType<typeof setTimeout>>();
     const generations = new Map<string, number>();
+    let definitionIndex: Map<string, vscode.Location[]> | undefined;
+    let definitionIndexRevision = 0;
+    let definitionIndexBuild: Promise<Map<string, vscode.Location[]>> | undefined;
     let lastReportedCompilerIssue: string | undefined;
 
     function reportCompilerIssue(key: string, message: string): void {
@@ -102,11 +152,82 @@ export function activate(context: vscode.ExtensionContext): void {
         }
     });
 
+    function invalidateDefinitionIndex(): void {
+        definitionIndexRevision++;
+        definitionIndex = undefined;
+    }
+
+    async function getDefinitionIndex(): Promise<Map<string, vscode.Location[]>> {
+        if (definitionIndex) return definitionIndex;
+        if (definitionIndexBuild) return definitionIndexBuild;
+
+        const buildRevision = definitionIndexRevision;
+        definitionIndexBuild = (async () => {
+            const uris = new Map<string, vscode.Uri>();
+            const excludedDirectories = "{**/.claude/**,**/.git/**,**/node_modules/**}";
+            for (const uri of await vscode.workspace.findFiles("**/*.zir", excludedDirectories)) uris.set(uri.toString(), uri);
+
+            const compiler = findCompiler();
+            const includes = compiler && includePath(compiler);
+            if (includes) {
+                const includeUri = vscode.Uri.file(includes);
+                for (const uri of await vscode.workspace.findFiles(new vscode.RelativePattern(includeUri, "**/*.zir"), excludedDirectories)) {
+                    uris.set(uri.toString(), uri);
+                }
+            }
+
+            const index = new Map<string, vscode.Location[]>();
+            const openDocuments = new Map(vscode.workspace.textDocuments.map(document => [document.uri.toString(), document]));
+            for (const uri of uris.values()) {
+                const openDocument = openDocuments.get(uri.toString());
+                let source: string;
+                try {
+                    source = openDocument
+                        ? openDocument.getText()
+                        : Buffer.from(await vscode.workspace.fs.readFile(uri)).toString("utf8");
+                } catch {
+                    continue;
+                }
+                for (const [name, locations] of indexDefinitions(uri, source)) {
+                    const existing = index.get(name) || [];
+                    existing.push(...locations);
+                    index.set(name, existing);
+                }
+            }
+
+            if (definitionIndexRevision === buildRevision) definitionIndex = index;
+            return index;
+        })().finally(() => {
+            definitionIndexBuild = undefined;
+        });
+
+        return definitionIndexBuild;
+    }
+
     context.subscriptions.push(vscode.languages.registerHoverProvider(selector, {
         provideHover(document, position) {
             const word = document.getText(document.getWordRangeAtPosition(position));
             const description = HOVER_MAP[word];
             return description ? new vscode.Hover(new vscode.MarkdownString(description)) : undefined;
+        }
+    }));
+
+    context.subscriptions.push(vscode.languages.registerDefinitionProvider(selector, {
+        async provideDefinition(document, position) {
+            const wordRange = document.getWordRangeAtPosition(position);
+            if (!wordRange) return undefined;
+            const name = document.getText(wordRange);
+            const definitions = await getDefinitionIndex();
+            const matches = definitions.get(name) || [];
+            const currentFileDefinitions = indexDefinitions(document.uri, document.getText()).get(name) || [];
+            const currentUri = document.uri.toString();
+            const locations = [
+                ...matches.filter(location => location.uri.toString() !== currentUri),
+                ...currentFileDefinitions
+            ];
+            const unique = new Map(locations.map(location => [`${location.uri.toString()}:${location.range.start.line}:${location.range.start.character}`, location]));
+            const results = [...unique.values()];
+            return results.length ? results : undefined;
         }
     }));
 
@@ -119,6 +240,30 @@ export function activate(context: vscode.ExtensionContext): void {
             ];
         }
     }, ".", ":"));
+
+    context.subscriptions.push(vscode.languages.registerDocumentSymbolProvider(selector, {
+        provideDocumentSymbols(document) {
+            const source = document.getText();
+            const code = maskNonCode(source);
+            const declarationPattern = /\b(fn|class|struct|enum|extend|type|const|static)\s+(?:mut\s+)?([A-Za-z_][A-Za-z0-9_]*)/g;
+            const symbols: vscode.DocumentSymbol[] = [];
+            let match: RegExpExecArray | null;
+            while ((match = declarationPattern.exec(code)) !== null) {
+                const nameOffset = match.index + match[0].lastIndexOf(match[2]);
+                const selectionRange = new vscode.Range(positionAt(source, nameOffset), positionAt(source, nameOffset + match[2].length));
+                const line = document.lineAt(selectionRange.start.line);
+                const range = new vscode.Range(line.range.start, line.range.end);
+                symbols.push(new vscode.DocumentSymbol(
+                    match[2],
+                    match[1],
+                    documentSymbolKind(match[1] as DeclarationKind),
+                    range,
+                    selectionRange
+                ));
+            }
+            return symbols;
+        }
+    }));
 
     function checkDocument(document: vscode.TextDocument): void {
         if (document.languageId !== "zircon" || document.uri.scheme !== "file") return;
@@ -169,7 +314,10 @@ export function activate(context: vscode.ExtensionContext): void {
     context.subscriptions.push(
         vscode.workspace.onDidOpenTextDocument(document => checkDocument(document)),
         vscode.workspace.onDidSaveTextDocument(document => scheduleCheck(document, 0)),
-        vscode.workspace.onDidChangeTextDocument(event => scheduleCheck(event.document)),
+        vscode.workspace.onDidChangeTextDocument(event => {
+            invalidateDefinitionIndex();
+            scheduleCheck(event.document);
+        }),
         vscode.workspace.onDidCloseTextDocument(document => {
             const uri = document.uri.toString();
             clearTimeout(timers.get(uri));
@@ -179,10 +327,32 @@ export function activate(context: vscode.ExtensionContext): void {
         }),
         vscode.workspace.onDidChangeConfiguration(event => {
             if (event.affectsConfiguration("zircon.compilerPath") || event.affectsConfiguration("zircon.includePath")) {
+                invalidateDefinitionIndex();
                 for (const document of vscode.workspace.textDocuments) checkDocument(document);
             }
-        })
+        }),
+        vscode.workspace.onDidChangeWorkspaceFolders(invalidateDefinitionIndex)
     );
+
+    const workspaceWatcher = vscode.workspace.createFileSystemWatcher("**/*.zir");
+    context.subscriptions.push(
+        workspaceWatcher,
+        workspaceWatcher.onDidCreate(invalidateDefinitionIndex),
+        workspaceWatcher.onDidChange(invalidateDefinitionIndex),
+        workspaceWatcher.onDidDelete(invalidateDefinitionIndex)
+    );
+
+    const compiler = findCompiler();
+    const includeDirectory = compiler && includePath(compiler);
+    if (includeDirectory) {
+        const includeWatcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(includeDirectory), "**/*.zir"));
+        context.subscriptions.push(
+            includeWatcher,
+            includeWatcher.onDidCreate(invalidateDefinitionIndex),
+            includeWatcher.onDidChange(invalidateDefinitionIndex),
+            includeWatcher.onDidDelete(invalidateDefinitionIndex)
+        );
+    }
 
     for (const document of vscode.workspace.textDocuments) checkDocument(document);
 }
