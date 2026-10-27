@@ -82,8 +82,7 @@
         },
         "constants": {
             "patterns": [
-                { "name": "constant.language.zircon", "match": "\\b(true|false|null)\\b" },
-                { "name": "support.constant.zircon", "match": "\\bzero\\b" }
+                { "name": "constant.language.zircon", "match": "\\b(true|false|null)\\b" }
             ]
         },
         "types": {
@@ -99,7 +98,7 @@
                 },
                 {
                     "name": "keyword.declaration.zircon",
-                    "match": "\\b(let|mut|static|const|extern|pub|fn|class|struct|enum|extend|type)\\b"
+                    "match": "\\b(let|mut|static|const|extern|pub|virtual|override|fn|class|struct|enum|extend|type)\\b"
                 },
                 {
                     "name": "keyword.operator.word.zircon",

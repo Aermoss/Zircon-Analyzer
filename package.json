@@ -3,7 +3,7 @@
     "displayName": "Zircon Analyzer",
     "description": "Zircon language support for Visual Studio Code.",
     "publisher": "zircon-lang",
-    "version": "0.4.0",
+    "version": "0.4.3",
     "engines": {
         "vscode": "^1.103.0"
     },
@@ -32,6 +32,15 @@
                     "type": "string",
                     "default": "",
                     "description": "Optional Zircon include directory. Defaults to ../include relative to the compiler executable."
+                },
+                "zircon.includePaths": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "default": [],
+                    "scope": "resource",
+                    "description": "Additional include directories passed to zirconc with -I, like -Isrc in a Makefile. Relative paths are resolved against the workspace folder."
                 }
             }
         },

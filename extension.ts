@@ -14,7 +14,7 @@ const HOVER_MAP: Record<string, string> = {
 
 const KEYWORDS = [
     "if", "else", "for", "while", "loop", "match", "return", "break", "continue",
-    "let", "mut", "const", "volatile", "fn", "class", "struct", "enum", "extend", "type",
+    "let", "mut", "const", "volatile", "virtual", "override", "fn", "class", "struct", "enum", "extend", "type",
     "extern", "asm", "async", "await", "static", "pub", "as", "operator", "new", "delete",
     "in", "include", "this"
 ];
@@ -49,6 +49,16 @@ function includePath(compilerPath: string): string | undefined {
     if (configured) return configured;
     const candidate = path.resolve(path.dirname(compilerPath), "..", "include");
     return fs.existsSync(candidate) ? candidate : undefined;
+}
+
+function extraIncludePaths(folder: vscode.WorkspaceFolder | undefined): string[] {
+    const configured = vscode.workspace.getConfiguration("zircon", folder?.uri).get<string[]>("includePaths") || [];
+    return configured.filter(Boolean).map(entry => path.resolve(folder?.uri.fsPath || "", entry));
+}
+
+function includePaths(compilerPath: string, folder: vscode.WorkspaceFolder | undefined): string[] {
+    const standard = includePath(compilerPath);
+    return [...(standard ? [standard] : []), ...extraIncludePaths(folder)];
 }
 
 function maskNonCode(source: string): string {
@@ -265,9 +275,16 @@ export function activate(context: vscode.ExtensionContext): void {
             for (const uri of await vscode.workspace.findFiles("**/*.zir", excludedDirectories)) uris.set(uri.toString(), uri);
 
             const compiler = findCompiler();
-            const includes = compiler && includePath(compiler);
-            if (includes) {
-                const includeUri = vscode.Uri.file(includes);
+            const includes = new Set<string>();
+            const standard = compiler && includePath(compiler);
+            if (standard) includes.add(standard);
+
+            for (const folder of vscode.workspace.workspaceFolders || []) {
+                for (const include of extraIncludePaths(folder)) includes.add(include);
+            }
+
+            for (const include of includes) {
+                const includeUri = vscode.Uri.file(include);
                 for (const uri of await vscode.workspace.findFiles(new vscode.RelativePattern(includeUri, "**/*.zir"), excludedDirectories)) {
                     uris.set(uri.toString(), uri);
                 }
@@ -489,10 +506,10 @@ export function activate(context: vscode.ExtensionContext): void {
             return;
         }
 
+        const folder = vscode.workspace.getWorkspaceFolder(document.uri);
         const args = ["-check", document.uri.fsPath];
-        const includes = includePath(compiler);
-        if (includes) args.push("-I", includes);
-        const cwd = vscode.workspace.getWorkspaceFolder(document.uri)?.uri.fsPath || path.dirname(document.uri.fsPath);
+        for (const include of includePaths(compiler, folder)) args.push("-I", include);
+        const cwd = folder?.uri.fsPath || path.dirname(document.uri.fsPath);
         execFile(compiler, args, { cwd, timeout: 15000, maxBuffer: 4 * 1024 * 1024, windowsHide: true }, (error, stdout, stderr) => {
             if (generations.get(uri) !== generation) return;
             if (error && error.killed) {
@@ -537,7 +554,7 @@ export function activate(context: vscode.ExtensionContext): void {
             diagnostics.delete(document.uri);
         }),
         vscode.workspace.onDidChangeConfiguration(event => {
-            if (event.affectsConfiguration("zircon.compilerPath") || event.affectsConfiguration("zircon.includePath")) {
+            if (event.affectsConfiguration("zircon.compilerPath") || event.affectsConfiguration("zircon.includePath") || event.affectsConfiguration("zircon.includePaths")) {
                 invalidateDefinitionIndex();
                 for (const document of vscode.workspace.textDocuments) checkDocument(document);
             }
