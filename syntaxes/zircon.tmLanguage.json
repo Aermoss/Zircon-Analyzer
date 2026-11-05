@@ -3,6 +3,7 @@
     "name": "Zircon",
     "scopeName": "source.zircon",
     "patterns": [
+        { "include": "#labels" },
         { "include": "#comments" },
         { "include": "#preprocessor" },
         { "include": "#attributes" },
@@ -15,6 +16,17 @@
         { "include": "#strings" }
     ],
     "repository": {
+        "labels": {
+            "patterns": [
+                {
+                    "match": "(')([A-Za-z_][A-Za-z0-9_]*)\\b(?!')",
+                    "captures": {
+                        "1": { "name": "punctuation.definition.label.zircon" },
+                        "2": { "name": "entity.name.label.zircon" }
+                    }
+                }
+            ]
+        },
         "comments": {
             "patterns": [
                 { "name": "comment.line.double-slash.zircon", "match": "//.*$" },
@@ -111,6 +123,10 @@
                 {
                     "name": "keyword.control.memory.zircon",
                     "match": "\\b(new|delete)\\b"
+                },
+                {
+                    "name": "variable.language.this.zircon",
+                    "match": "\\bthis\\b"
                 }
             ]
         },
@@ -141,8 +157,12 @@
                     "match": "(&|\\||\\^|~|<<|>>)"
                 },
                 {
-                    "name": "keyword.operator.ternary.zircon",
-                    "match": "(\\?|:)"
+                    "name": "keyword.operator.try.zircon",
+                    "match": "\\?"
+                },
+                {
+                    "name": "keyword.operator.colon.zircon",
+                    "match": ":"
                 }
             ]
         },

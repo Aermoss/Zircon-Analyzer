@@ -15,11 +15,12 @@ const HOVER_MAP: Record<string, string> = {
 const KEYWORDS = [
     "if", "else", "for", "while", "loop", "match", "return", "break", "continue",
     "let", "mut", "const", "volatile", "virtual", "override", "fn", "class", "struct", "enum", "extend", "type",
-    "extern", "asm", "async", "await", "static", "pub", "as", "operator", "new", "delete",
+    "extern", "asm", "unsafe", "async", "await", "static", "pub", "as", "operator", "new", "delete",
     "in", "include", "this"
 ];
 const TYPES = ["void", "bool", "char", "i8", "i16", "i32", "i64", "i128", "isize", "u8", "u16", "u32", "u64", "u128", "usize", "f32", "f64"];
 const CONSTANTS = ["true", "false", "null"];
+const LABEL_PATTERN = /^'[A-Za-z_][A-Za-z0-9_]*$/;
 const DIAGNOSTIC_PATTERN = /^(.*):(\d+):(\d+): (Error|Warning): (.+)$/;
 const ANSI_ESCAPE = /\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g;
 
@@ -61,10 +62,57 @@ function includePaths(compilerPath: string, folder: vscode.WorkspaceFolder | und
     return [...(standard ? [standard] : []), ...extraIncludePaths(folder)];
 }
 
+function includeSearchDirectories(documentPath: string, compilerPath: string | undefined, folder: vscode.WorkspaceFolder | undefined): string[] {
+    const cwd = folder?.uri.fsPath || path.dirname(documentPath);
+    const directories = [path.dirname(documentPath), cwd, path.join(cwd, "include")];
+    if (compilerPath) directories.push(path.resolve(path.dirname(compilerPath), "..", "include"));
+    directories.push(...(compilerPath ? includePaths(compilerPath, folder) : extraIncludePaths(folder)));
+    return directories;
+}
+
+function resolveInclude(name: string, directories: string[]): string | undefined {
+    for (const directory of directories) {
+        const candidate = path.resolve(directory, name);
+        let stat: fs.Stats;
+        try {
+            stat = fs.statSync(candidate);
+        } catch {
+            continue;
+        }
+        if (!stat.isDirectory()) return candidate;
+        const entry = path.join(candidate, "Entry.zir");
+        if (fs.existsSync(entry)) return entry;
+    }
+    return undefined;
+}
+
+function findIncludePaths(source: string): Array<{ name: string; start: number; end: number }> {
+    const code = maskNonCode(source);
+    const results: Array<{ name: string; start: number; end: number }> = [];
+    const directive = /#\[\s*include\b/g;
+    let match: RegExpExecArray | null;
+
+    while ((match = directive.exec(code)) !== null) {
+        const close = code.indexOf("]", directive.lastIndex);
+        const end = close < 0 ? code.length : close;
+        const strings = /"((?:\\.|[^"\\\r\n])*)"/g;
+        strings.lastIndex = directive.lastIndex;
+        let literal: RegExpExecArray | null;
+
+        while ((literal = strings.exec(source)) !== null && literal.index < end) {
+            results.push({ name: literal[1].replace(/\\(.)/g, "$1"), start: literal.index + 1, end: literal.index + 1 + literal[1].length });
+        }
+
+        directive.lastIndex = end;
+    }
+
+    return results;
+}
+
 function maskNonCode(source: string): string {
     const mask = (value: string): string => value.replace(/[^\r\n]/g, " ");
     return source
-        .replace(/"(?:\\.|[^"\\\r\n])*"|'(?:\\.|[^'\\\r\n])*'/g, mask)
+        .replace(/"(?:\\.|[^"\\\r\n])*"|'[A-Za-z_][A-Za-z0-9_]*(?!['A-Za-z0-9_])|'(?:\\.|[^'\\\r\n])*'/g, value => LABEL_PATTERN.test(value) ? value : mask(value))
         .replace(/\/\*[\s\S]*?\*\//g, mask)
         .replace(/\/\/[^\r\n]*/g, mask);
 }
@@ -466,6 +514,24 @@ export function activate(context: vscode.ExtensionContext): void {
             return items;
         }
     }, ".", ":", ..."abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_".split("")));
+
+    context.subscriptions.push(vscode.languages.registerDocumentLinkProvider(selector, {
+        provideDocumentLinks(document) {
+            const source = document.getText();
+            const directories = includeSearchDirectories(document.uri.fsPath, findCompiler(), vscode.workspace.getWorkspaceFolder(document.uri));
+            const links: vscode.DocumentLink[] = [];
+
+            for (const include of findIncludePaths(source)) {
+                const target = resolveInclude(include.name, directories);
+                if (!target) continue;
+                const link = new vscode.DocumentLink(new vscode.Range(document.positionAt(include.start), document.positionAt(include.end)), vscode.Uri.file(target));
+                link.tooltip = target;
+                links.push(link);
+            }
+
+            return links;
+        }
+    }));
 
     context.subscriptions.push(vscode.languages.registerDocumentSymbolProvider(selector, {
         provideDocumentSymbols(document) {
