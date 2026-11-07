@@ -1,0 +1,87 @@
+{
+    "Main": {
+        "prefix": "main",
+        "body": ["fn Main(args: &mut Vector<String>) -> i32 {", "\t$0", "\t0", "}"],
+        "description": "Program entry point"
+    },
+    "Function": {
+        "prefix": "fn",
+        "body": ["fn ${1:Name}(${2}) -> ${3:i32} {", "\t$0", "}"],
+        "description": "Function"
+    },
+    "Method": {
+        "prefix": "method",
+        "body": ["pub fn ${1:Name}(&${2:mut }this${3}) -> ${4:i32} {", "\t$0", "}"],
+        "description": "Method"
+    },
+    "Class": {
+        "prefix": "class",
+        "body": ["class ${1:Name} {", "\tpub ${2:value}: ${3:i32};", "", "\t${1:Name}(&mut this) {}", "", "\t$0", "}"],
+        "description": "Class with a field and a constructor"
+    },
+    "Struct": {
+        "prefix": "struct",
+        "body": ["struct ${1:Name} {", "\tpub ${2:value}: ${3:i32}", "}"],
+        "description": "Structure"
+    },
+    "Enum": {
+        "prefix": "enum",
+        "body": ["enum ${1:Name} {", "\t${2:First}, ${3:Second}", "}"],
+        "description": "Enumeration"
+    },
+    "Extend": {
+        "prefix": "extend",
+        "body": ["extend ${1:Type} {", "\tpub fn ${2:Name}(this) -> ${3:String} {", "\t\t$0", "\t}", "}"],
+        "description": "Add methods to an existing type"
+    },
+    "Match": {
+        "prefix": "match",
+        "body": ["match ${1:value} {", "\t${2:pattern} => ${3:result},", "\t_ => $0", "}"],
+        "description": "Match expression"
+    },
+    "If": {
+        "prefix": "if",
+        "body": ["if ${1:condition} {", "\t$0", "}"],
+        "description": "If statement"
+    },
+    "If else": {
+        "prefix": "ifelse",
+        "body": ["if ${1:condition} {", "\t$2", "} else {", "\t$0", "}"],
+        "description": "If statement with an else branch"
+    },
+    "If let": {
+        "prefix": "iflet",
+        "body": ["if let ${1:Option<${2:T}>::Some(${3:value})} = ${4:expression} {", "\t$0", "}"],
+        "description": "Pattern-matching if"
+    },
+    "For range": {
+        "prefix": "for",
+        "body": ["for ${1:i} in ${2:0}..${3:count} {", "\t$0", "}"],
+        "description": "Loop over a range"
+    },
+    "While": {
+        "prefix": "while",
+        "body": ["while ${1:condition} {", "\t$0", "}"],
+        "description": "While loop"
+    },
+    "Loop": {
+        "prefix": "loop",
+        "body": ["loop {", "\t$0", "}"],
+        "description": "Infinite loop"
+    },
+    "Let": {
+        "prefix": "let",
+        "body": ["let ${1:name} = ${0:value};"],
+        "description": "Variable"
+    },
+    "Include": {
+        "prefix": "include",
+        "body": ["#[include \"${1:std/io}\" : *]"],
+        "description": "Include modules"
+    },
+    "Conditional": {
+        "prefix": "#if",
+        "body": ["#[if ${1:WINDOWS}]", "$0", "#[endif]"],
+        "description": "Conditional compilation"
+    }
+}

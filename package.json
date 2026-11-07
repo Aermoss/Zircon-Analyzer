@@ -2,13 +2,14 @@
     "name": "zircon-analyzer",
     "displayName": "Zircon Analyzer",
     "description": "Zircon language support for Visual Studio Code.",
-    "publisher": "zircon-lang",
-    "version": "0.4.5",
+    "publisher": "bithynia",
+    "version": "0.5.1",
     "engines": {
         "vscode": "^1.103.0"
     },
     "categories": [
-        "Programming Languages"
+        "Programming Languages",
+        "Snippets"
     ],
     "repository": {
         "type": "git",
@@ -26,7 +27,7 @@
                 "zircon.compilerPath": {
                     "type": "string",
                     "default": "",
-                    "description": "Path to the zirconc compiler executable. If empty, zirconc is searched on the system PATH."
+                    "description": "Path to the zirconc compiler executable. If empty, zirconc is searched on the system PATH, in bin/ of the workspace folder and in ../Zircon/bin/ next to it."
                 },
                 "zircon.includePath": {
                     "type": "string",
@@ -62,7 +63,50 @@
                 "scopeName": "source.zircon",
                 "path": "./syntaxes/zircon.tmLanguage.json"
             }
-        ]
+        ],
+        "snippets": [
+            {
+                "language": "zircon",
+                "path": "./snippets/zircon.json"
+            }
+        ],
+        "taskDefinitions": [
+            {
+                "type": "zircon",
+                "required": [
+                    "file"
+                ],
+                "properties": {
+                    "file": {
+                        "type": "string",
+                        "description": "The Zircon file to compile and run."
+                    }
+                }
+            }
+        ],
+        "commands": [
+            {
+                "command": "zircon.runFile",
+                "title": "Run Current File",
+                "category": "Zircon",
+                "icon": "$(play)"
+            }
+        ],
+        "menus": {
+            "editor/title": [
+                {
+                    "command": "zircon.runFile",
+                    "when": "editorLangId == zircon",
+                    "group": "navigation"
+                }
+            ],
+            "commandPalette": [
+                {
+                    "command": "zircon.runFile",
+                    "when": "editorLangId == zircon"
+                }
+            ]
+        }
     },
     "main": "./out/extension.js",
     "activationEvents": [
