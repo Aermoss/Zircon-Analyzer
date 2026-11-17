@@ -109,15 +109,44 @@ function extraIncludePaths(folder: vscode.WorkspaceFolder | undefined): string[]
 
 function includePaths(compilerPath: string, folder: vscode.WorkspaceFolder | undefined): string[] {
     const standard = includePath(compilerPath);
-    return [...(standard ? [standard] : []), ...extraIncludePaths(folder)];
+    return [...extraIncludePaths(folder), ...(standard ? [standard] : [])];
 }
 
 function includeSearchDirectories(documentPath: string, compilerPath: string | undefined, folder: vscode.WorkspaceFolder | undefined): string[] {
     const cwd = folder?.uri.fsPath || path.dirname(documentPath);
-    const directories = [path.dirname(documentPath), cwd, path.join(cwd, "include")];
+    const directories = [path.dirname(documentPath), cwd, ...extraIncludePaths(folder), path.join(cwd, "include")];
+    const standard = compilerPath && includePath(compilerPath);
+    if (standard) directories.push(standard);
     if (compilerPath) directories.push(path.resolve(path.dirname(compilerPath), "..", "include"));
-    directories.push(...(compilerPath ? includePaths(compilerPath, folder) : extraIncludePaths(folder)));
     return directories;
+}
+
+function compilerArguments(compilerPath: string, folder: vscode.WorkspaceFolder | undefined): string[] {
+    const config = vscode.workspace.getConfiguration("zircon", folder?.uri);
+    const args: string[] = [];
+    const target = config.get<string>("target")?.trim();
+    if (target) args.push("-target", target);
+
+    for (const define of config.get<string[]>("defines") || []) {
+        if (define.trim()) args.push(`-D${define.trim()}`);
+    }
+
+    for (const include of includePaths(compilerPath, folder)) args.push("-I", include);
+    args.push(...(config.get<string[]>("arguments") || []).filter(Boolean));
+    return args;
+}
+
+function configuredTarget(folder: vscode.WorkspaceFolder | undefined): string {
+    return vscode.workspace.getConfiguration("zircon", folder?.uri).get<string>("target")?.trim() || "";
+}
+
+function insideWorkspace(file: string): boolean {
+    const normalized = path.resolve(file).toLowerCase();
+
+    return (vscode.workspace.workspaceFolders || []).some(folder => {
+        const root = path.resolve(folder.uri.fsPath).toLowerCase();
+        return normalized === root || normalized.startsWith(root + path.sep);
+    });
 }
 
 function resolveInclude(name: string, directories: string[]): string | undefined {
@@ -1334,7 +1363,7 @@ export function activate(context: vscode.ExtensionContext): void {
     function parseDiagnostics(text: string, document: vscode.TextDocument, cwd: string, compiler: string): vscode.Diagnostic[] {
         const lines = text.replace(ANSI_ESCAPE, "").split(/\r?\n/);
         const result: vscode.Diagnostic[] = [];
-        const elsewhere = new Map<string, string[]>();
+        const elsewhere = new Map<string, { errors: string[]; warnings: string[] }>();
         const sourcePath = path.resolve(document.uri.fsPath).toLowerCase();
         let previous: vscode.Diagnostic | undefined;
 
@@ -1362,8 +1391,10 @@ export function activate(context: vscode.ExtensionContext): void {
 
             if (file.toLowerCase() !== sourcePath) {
                 previous = undefined;
-                const messages = elsewhere.get(file) || [];
-                messages.push(`${path.basename(file)}:${line + 1}:${character + 1}: ${message}`);
+                const warning = match[4] === "Warning";
+                if (warning && !insideWorkspace(file)) continue;
+                const messages = elsewhere.get(file) || { errors: [], warnings: [] };
+                (warning ? messages.warnings : messages.errors).push(`${path.basename(file)}:${line + 1}:${character + 1}: ${message}`);
                 elsewhere.set(file, messages);
                 continue;
             }
@@ -1396,7 +1427,17 @@ export function activate(context: vscode.ExtensionContext): void {
                 const range = include
                     ? new vscode.Range(document.positionAt(include.start), document.positionAt(include.end))
                     : new vscode.Range(0, 0, 0, 0);
-                const diagnostic = new vscode.Diagnostic(range, `${path.basename(file)} has ${messages.length} error(s):\n${messages.join("\n")}`, vscode.DiagnosticSeverity.Error);
+                const hasErrors = messages.errors.length > 0;
+                const listed = [...messages.errors, ...messages.warnings];
+                const summary = [
+                    ...(hasErrors ? [`${messages.errors.length} error(s)`] : []),
+                    ...(messages.warnings.length ? [`${messages.warnings.length} warning(s)`] : [])
+                ].join(" and ");
+                const diagnostic = new vscode.Diagnostic(
+                    range,
+                    `${path.basename(file)} has ${summary}:\n${listed.join("\n")}`,
+                    hasErrors ? vscode.DiagnosticSeverity.Error : vscode.DiagnosticSeverity.Warning
+                );
                 diagnostic.source = "zirconc";
                 result.push(diagnostic);
             }
@@ -1431,7 +1472,7 @@ export function activate(context: vscode.ExtensionContext): void {
             }
         }
 
-        for (const include of includePaths(compiler, folder)) args.push("-I", include);
+        args.push(...compilerArguments(compiler, folder));
         const cwd = folder?.uri.fsPath || path.dirname(document.uri.fsPath);
         execFile(compiler, args, { cwd, timeout: 15000, maxBuffer: 4 * 1024 * 1024, windowsHide: true }, (error, stdout, stderr) => {
             if (generations.get(uri) !== generation) return;
@@ -1484,12 +1525,18 @@ export function activate(context: vscode.ExtensionContext): void {
             return;
         }
 
+        const target = configuredTarget(folder);
+
+        if (target.startsWith("svarog")) {
+            void vscode.window.showErrorMessage(`Files built for '${target}' cannot run on this computer. Build them with the project's Makefile and run them on Svarog.`);
+            return;
+        }
+
         const directory = path.join(os.tmpdir(), "zircon-analyzer");
         fs.mkdirSync(directory, { recursive: true });
         const name = path.basename(document.uri.fsPath, path.extname(document.uri.fsPath));
         const executable = path.join(directory, process.platform === "win32" ? `${name}.exe` : name);
-        const args = [document.uri.fsPath, "-o", executable, "-r"];
-        for (const include of includePaths(compiler, folder)) args.push("-I", include);
+        const args = [document.uri.fsPath, "-o", executable, "-r", ...compilerArguments(compiler, folder)];
         const cwd = folder?.uri.fsPath || path.dirname(document.uri.fsPath);
         const task = new vscode.Task(
             { type: "zircon", file: document.uri.fsPath },
@@ -1519,7 +1566,9 @@ export function activate(context: vscode.ExtensionContext): void {
             diagnostics.delete(document.uri);
         }),
         vscode.workspace.onDidChangeConfiguration(event => {
-            if (event.affectsConfiguration("zircon.compilerPath") || event.affectsConfiguration("zircon.includePath") || event.affectsConfiguration("zircon.includePaths")) {
+            const settings = ["compilerPath", "includePath", "includePaths", "target", "defines", "arguments"];
+
+            if (settings.some(setting => event.affectsConfiguration(`zircon.${setting}`))) {
                 invalidateDefinitionIndex();
                 contentsSupported = true;
                 for (const document of vscode.workspace.textDocuments) checkDocument(document);
